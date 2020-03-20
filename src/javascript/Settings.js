@@ -8,7 +8,7 @@ Ext.define('Rally.apps.kanban.Settings', {
         'Rally.ui.plugin.FieldValidationUi'
     ],
 
-    getFields: function(config) {
+    getFields: function (config) {
         var items = [
             {
                 name: 'modelType',
@@ -17,31 +17,32 @@ Ext.define('Rally.apps.kanban.Settings', {
                 fieldLabel: 'Portfolio Item Type',
                 valueField: 'TypePath',
                 listeners: {
-                    change: function(cb){
-                        if (cb.getRecord() && cb.getRecord().get('TypePath')){
+                    change: function (cb) {
+                        if (cb.getRecord() && cb.getRecord().get('TypePath')) {
                             var model = cb.getRecord().get('TypePath');
-                            this.fireEvent('modelselected',model);
+                            this.fireEvent('modelselected', model);
                         }
                     }
                 }
-            },{
+            }, {
                 name: 'groupByField',
                 xtype: 'rallyfieldcombobox',
                 model: Ext.identityFn(config.modelType),
                 margin: '10px 0 0 0',
                 fieldLabel: 'Columns',
                 listeners: {
-                    select: function(combo) {
+                    select: function (combo) {
                         this.fireEvent('fieldselected', combo.getRecord().get('fieldDefinition'));
                     },
-                    ready: function(combo) {
-                        combo.store.filterBy(function(record) {
+                    ready: function (combo) {
+                        combo.store.filterBy(function (record) {
                             var attr = record.get('fieldDefinition').attributeDefinition;
+                            let whitelist = ['c_AuthPortfolioKanban', 'c_NEMOKanbanState', 'c_CFRKanbanState'];
                             // if(attr.AttributeType !== 'OBJECT'){
                             //     console.log('OBJECT>>',record.get('value'));
                             // }
                             // return attr && !attr.ReadOnly && attr.Constrained && attr.AttributeType !== 'OBJECT' && attr.AttributeType !== 'COLLECTION';
-                            return attr && !attr.ReadOnly && attr.Constrained && attr.AttributeType !== 'COLLECTION';
+                            return _.contains(whitelist, record.get('value')) || (attr && !attr.ReadOnly && attr.Constrained && attr.AttributeType !== 'COLLECTION');
                         });
                         if (combo.getRecord()) {
                             this.fireEvent('fieldselected', combo.getRecord().get('fieldDefinition'));
@@ -49,25 +50,25 @@ Ext.define('Rally.apps.kanban.Settings', {
                     }
                 },
                 handlesEvents: {
-                    select: function(cb){
+                    select: function (cb) {
 
-                        if (cb.getRecord() && cb.getRecord().get('TypePath')){
+                        if (cb.getRecord() && cb.getRecord().get('TypePath')) {
                             var selectedField = this.getValue();
                             this.refreshWithNewModelType(cb.getRecord().get('TypePath'));
                             this.setValue(selectedField);
                         }
 
                     },
-                    modelselected: function(model){
-                            var selectedField = this.getValue();
-                            this.refreshWithNewModelType(model);
-                            this.setValue(selectedField);
+                    modelselected: function (model) {
+                        var selectedField = this.getValue();
+                        this.refreshWithNewModelType(model);
+                        this.setValue(selectedField);
 
                     }
                 },
                 bubbleEvents: ['fieldselected', 'fieldready']
             },
-            
+
             {
                 name: 'columns',
                 readyEvent: 'ready',
@@ -78,16 +79,16 @@ Ext.define('Rally.apps.kanban.Settings', {
                 defaultCardFields: config.defaultCardFields,
                 modelType: config.modelType,
                 handlesEvents: {
-                    fieldselected: function(field) {
+                    fieldselected: function (field) {
                         this.refreshWithNewField(field);
                     },
-                    modelselected: function(model){
+                    modelselected: function (model) {
                         console.log('modelselected', model);
                         this.refreshWithNewModel(model);
                     }
                 },
                 listeners: {
-                    ready: function() {
+                    ready: function () {
                         this.fireEvent('columnsettingsready');
                     }
                 },
@@ -102,16 +103,16 @@ Ext.define('Rally.apps.kanban.Settings', {
             margin: '10 0 0 0',
             mapsToMultiplePreferenceKeys: ['showRows', 'rowsField'],
             readyEvent: 'ready',
-            isAllowedFieldFn: function(field) {
+            isAllowedFieldFn: function (field) {
                 var attr = field.attributeDefinition;
                 console.log('field', field.name, attr);
                 return (attr.Custom && (attr.Constrained || attr.AttributeType.toLowerCase() !== 'string') ||
-                    attr.Constrained || field.name === "Parent" ||  _.contains(['boolean'], attr.AttributeType.toLowerCase())) &&
+                    attr.Constrained || field.name === "Parent" || _.contains(['boolean'], attr.AttributeType.toLowerCase())) &&
                     !_.contains(['web_link', 'text', 'date'], attr.AttributeType.toLowerCase());
             },
             explicitFields: [
-                {name: 'Sizing', value: 'PlanEstimate'}
-           ]
+                { name: 'Sizing', value: 'PlanEstimate' }
+            ]
         });
 
         items.push(

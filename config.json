@@ -2,6 +2,26 @@
     "name": "Portfolio Kanban Using Alternate Field",
     "className": "TSPortfolioKanbanAlternateFieldApp",
     "server": "https://rally1.rallydev.com",
+    "repository": "https://github.com/CustomAgile/portfolio-kanban-alternate-field",
     "sdk": "2.1",
-    "apiKey": "_PUT_APIKEY_HERE_"
+    "apiKey": "_PUT_APIKEY_HERE_",
+    "javascript": [
+        "node_modules/@customagile/ancestor-pi-multi-level-pi-app-filter/index.js",
+        "src/javascript/__ts-info-link.js",
+        "src/javascript/__ts-logger.js",
+        "src/javascript/_ts_override_addnew.js",
+        "src/javascript/_ts_override_card_age_plugin.js",
+        "src/javascript/Column.js",
+        "src/javascript/ColumnCardFieldPicker.js",
+        "src/javascript/ColumnSettingsField.js",
+        "src/javascript/portfolio-state-editor-plugin.js",
+        "src/javascript/RowSettingsField.js",
+        "src/javascript/Settings.js",
+        "src/javascript/toolbox.js",
+        "src/javascript/app.js"
+    ],
+    "css": [
+        "src/style/app.css",
+        "node_modules/@customagile/ancestor-pi-multi-level-pi-app-filter/index.css"
+    ]
 }

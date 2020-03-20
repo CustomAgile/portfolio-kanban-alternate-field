@@ -25,15 +25,44 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
     appName: 'Kanban',
 
     settingsScope: 'project',
-    autoScroll: false,
+    // autoScroll: false,
 
-    
+    layout: {
+        type: 'vbox',
+        align: 'stretch'
+    },
+
+    items: [{
+        id: Utils.AncestorPiAppFilter.RENDER_AREA_ID,
+        xtype: 'container',
+        layout: {
+            type: 'hbox',
+            align: 'middle',
+            defaultMargins: '0 10 10 0',
+        }
+    }, {
+        id: Utils.AncestorPiAppFilter.PANEL_RENDER_AREA_ID,
+        xtype: 'container',
+        layout: {
+            type: 'hbox',
+            align: 'middle',
+            defaultMargins: '0 10 10 0',
+        }
+    }, {
+        id: 'grid-area',
+        itemId: 'grid-area',
+        xtype: 'container',
+        flex: 1,
+        type: 'vbox',
+        align: 'stretch'
+    }],
+
     config: {
         defaultSettings: {
             groupByField: 'InvestmentCategory',
             showRows: false,
             columns: Ext.JSON.encode({
-                None: {wip: ''}
+                None: { wip: '' }
             }),
             cardFields: 'FormattedID,Name,Owner,Discussion', //remove with COLUMN_LEVEL_FIELD_PICKER_ON_KANBAN_SETTINGS
             hideReleasedCards: false,
@@ -44,16 +73,42 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         }
     },
 
-    launch: function() {
+    launch: function () {
         var modelType = this.getSetting('modelType');
+        this.filterDeferred = Ext.create('Deft.Deferred');
 
-        if (!modelType){
-            this.add({
+        this.ancestorFilterPlugin = Ext.create('Utils.AncestorPiAppFilter', {
+            ptype: 'UtilsAncestorPiAppFilter',
+            pluginId: 'ancestorFilterPlugin',
+            settingsConfig: {},
+            whiteListFields: ['Tags', 'Milestones', 'c_EnterpriseApprovalEA', 'c_EAEpic'],
+            filtersHidden: false,
+            visibleTab: modelType,
+            listeners: {
+                scope: this,
+                ready(plugin) {
+                    plugin.addListener({
+                        scope: this,
+                        select: this._addCardboardContent,
+                        change: this._addCardboardContent
+                    });
+                    this.filterDeferred.resolve();
+                },
+            }
+        });
+        this.addPlugin(this.ancestorFilterPlugin);
+
+        if (!modelType) {
+            this.down('#grid-area').add({
                 xtype: 'container',
                 html: '<div class="no-data-container">Please set up the configuration settings in the board.<div class="secondary-message">'
             });
             return;
         }
+
+        this.down('#grid-area').on('resize', this.resizeBoard, this);
+
+        this.setLoading(true);
 
         Rally.data.ModelFactory.getModel({
             type: modelType,
@@ -62,7 +117,15 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         });
     },
 
-    getOptions: function() {
+    resizeBoard: function () {
+        let gridArea = this.down('#grid-area');
+        let gridboard = this.down('rallygridboard');
+        if (gridArea && gridboard) {
+            gridboard.setHeight(gridArea.getHeight())
+        }
+    },
+
+    getOptions: function () {
         return [
             {
                 text: 'Print',
@@ -72,7 +135,7 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         ];
     },
 
-    getSettingsFields: function() {
+    getSettingsFields: function () {
         return Rally.apps.kanban.Settings.getFields({
             shouldShowColumnLevelFieldPicker: this._shouldShowColumnLevelFieldPicker(),
             defaultCardFields: this.getSetting('cardFields'),
@@ -85,54 +148,75 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
      * @protected
      * @param {Rally.app.TimeboxScope} timeboxScope The new scope
      */
-    onTimeboxScopeChange: function(timeboxScope) {
+    onTimeboxScopeChange: function (timeboxScope) {
         this.callParent(arguments);
         this.gridboard.destroy();
         this.launch();
     },
 
-    _shouldShowColumnLevelFieldPicker: function() {
+    _shouldShowColumnLevelFieldPicker: function () {
         return this.getContext().isFeatureEnabled('COLUMN_LEVEL_FIELD_PICKER_ON_KANBAN_SETTINGS');
     },
 
-    _onModelRetrieved: function(model) {
-        this.logger.log("_onModelRetrieved",model);
-        
+    _onModelRetrieved: function (model) {
+        this.logger.log("_onModelRetrieved", model);
+
+        this.modelTypePath = model.typePath;
         this.groupByField = model.getField(this.getSetting('groupByField'));
-        this._addCardboardContent();
+
+        this.filterDeferred.promise.then({
+            success() {
+                this._addCardboardContent();
+            },
+            scope: this
+        });
     },
 
-    _addCardboardContent: function() {
+    _addCardboardContent: async function () {
         this.logger.log('_addCardboardContent');
-        
-        if ( this.gridboard) { this.gridboard.destroy(); }
-        
+
+        this.setLoading(true);
+
+        if (this.gridboard) { this.gridboard.destroy(); }
+
         var cardboardConfig = this._getCardboardConfig();
+        let gridboardConfig = await this._getGridboardConfig(cardboardConfig);
+
+        if (!gridboardConfig.storeConfig.filters) {
+            return;
+        }
 
         var columnSetting = this._getColumnSetting();
+
         if (columnSetting) {
             cardboardConfig.columns = this._getColumnConfig(columnSetting);
         }
 
-        this.logger.log('config:', this._getGridboardConfig(cardboardConfig));
+        this.logger.log('config:', gridboardConfig);
 
-        if (!this.rendered){
-            this.on('render', function(){
-                this.gridboard = this.add(this._getGridboardConfig(cardboardConfig));
+        if (!this.rendered) {
+            this.on('render', function () {
+                this.gridboard = this.down('#grid-area').add(gridboardConfig);
             }, this);
         } else {
-            this.gridboard = this.add(this._getGridboardConfig(cardboardConfig));
+            this.gridboard = this.down('#grid-area').add(gridboardConfig);
         }
     },
 
-    _getGridboardConfig: function(cardboardConfig) {
+    _getGridboardConfig: async function (cardboardConfig) {
         var context = this.getContext(),
             modelNames = this._getDefaultTypes(),
             blacklist = ['Successors', 'Predecessors', 'DisplayColor'],
-            height = this.getHeight && this.getHeight(),
+            // height = this.down('#grid-area').getHeight(),
             typeName = modelNames[0].replace('PortfolioItem/', '');
 
-        this.logger.log('_getGridboardConfig', height);
+        let dataContext = context.getDataContext();
+
+        if (this.searchAllProjects()) {
+            dataContext.project = null;
+        }
+
+        let filters = await this._getFilters();
 
         return {
             xtype: 'rallygridboard',
@@ -143,6 +227,7 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
                 {
                     ptype: 'rallygridboardaddnew',
                     addNewControlConfig: {
+                        margin: '0 15 0 0',
                         fieldLabel: "New " + typeName,
                         listeners: {
                             beforecreate: this._onBeforeCreate,
@@ -157,16 +242,19 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
                     ptype: 'rallygridboardinlinefiltercontrol',
                     inlineFilterButtonConfig: {
                         stateful: true,
-                        stateId: context.getScopedStateId('kanban-filter'),
+                        stateId: context.getScopedStateId('kanban-filter-hidden'),
+                        hidden: true,
                         modelNames: modelNames,
                         margin: '3 9 3 30',
-                        inlineFilterPanelConfig: 
+                        inlineFilterPanelConfig:
                         {
                             collapsed: false,
+                            hidden: true,
                             quickFilterPanelConfig: {
-                                defaultFields: ['Owner'],
+                                hidden: true,
+                                defaultFields: [],
                                 addQuickFilterConfig: {
-                                    whiteListFields: ['Milestones']
+                                    whiteListFields: ['Tags', 'Milestones', 'c_EnterpriseApprovalEA', 'c_EAEpic']
                                 }
                             }
                         }
@@ -190,15 +278,17 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
             context: context,
             modelNames: modelNames,
             storeConfig: {
-                filters: this._getFilters()
+                filters,
+                context: dataContext,
+                enablePostGet: true
             },
-            height: height
+            // height: height
         };
     },
 
-    _getColumnConfig: function(columnSetting) {
+    _getColumnConfig: function (columnSetting) {
         var columns = [];
-        Ext.Object.each(columnSetting, function(column, values) {
+        Ext.Object.each(columnSetting, function (column, values) {
             var columnConfig = {
                 xtype: 'kanbancolumn',
                 enableWipLimit: true,
@@ -218,7 +308,7 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
                     }
                 }
             };
-            if(this._shouldShowColumnLevelFieldPicker()) {
+            if (this._shouldShowColumnLevelFieldPicker()) {
                 columnConfig.fields = this._getFieldsForColumn(values);
             }
             columns.push(columnConfig);
@@ -229,7 +319,7 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         return columns;
     },
 
-    _getFieldsForColumn: function(values) {
+    _getFieldsForColumn: function (values) {
         var columnFields = [];
         if (this._shouldShowColumnLevelFieldPicker()) {
             if (values.cardFields) {
@@ -241,22 +331,28 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         return columnFields;
     },
 
-    _onInvalidFilter: function() {
+    _onInvalidFilter: function () {
         Rally.ui.notify.Notifier.showError({
             message: 'Invalid query: ' + this.getSetting('query')
         });
     },
 
-    _getCardboardConfig: function() {
+    _getCardboardConfig: function () {
+        let context = this.getContext().getDataContext();
+
+        if (this.searchAllProjects()) {
+            context.project = null;
+        }
+
         var config = {
             xtype: 'rallycardboard',
             plugins: [
-                {ptype: 'rallycardboardprinting', pluginId: 'print'},
+                { ptype: 'rallycardboardprinting', pluginId: 'print' },
                 {
                     ptype: 'rallyscrollablecardboard',
                     containerEl: this.getEl()
                 },
-                {ptype: 'rallyfixedheadercardboard'}
+                { ptype: 'rallyfixedheadercardboard' }
             ],
             types: this._getDefaultTypes(),
             attribute: this.getSetting('groupByField'),
@@ -279,9 +375,11 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
                 showBlockedReason: true
             },
             storeConfig: {
-                context: this.getContext().getDataContext()
+                context,
+                enablePostGet: true
             }
         };
+
         if (this.getSetting('showRows')) {
             Ext.merge(config, {
                 rowConfig: {
@@ -290,34 +388,49 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
                 }
             });
         }
+
         return config;
     },
 
-    _getFilters: function() {
+    _getFilters: async function () {
         var filters = [];
-        if(this.getSetting('query')) {
+        let loadingFailed = false;
+        if (this.getSetting('query')) {
             filters.push(Rally.data.QueryFilter.fromQueryString(this.getSetting('query')));
         }
-        if(this.getContext().getTimeboxScope()) {
+        if (this.getContext().getTimeboxScope()) {
             filters.push(this.getContext().getTimeboxScope().getQueryFilter());
+        }
+
+        let ancestorAndMultiFilters = await this.ancestorFilterPlugin.getAllFiltersForType(this.modelTypePath, true).catch((e) => {
+            Rally.ui.notify.Notifier.showError({ message: (e.message || e) });
+            loadingFailed = true;
+        });
+
+        if (loadingFailed) {
+            return null;
+        }
+
+        if (ancestorAndMultiFilters) {
+            filters = filters.concat(ancestorAndMultiFilters);
         }
         return filters;
     },
 
-    _getColumnSetting: function() {
+    _getColumnSetting: function () {
         var columnSetting = this.getSetting('columns');
         return columnSetting && Ext.JSON.decode(columnSetting);
     },
-    _print: function() {
-        this.gridboard.getGridOrBoard().openPrintPage({title: 'Kanban Board'});
+    _print: function () {
+        this.gridboard.getGridOrBoard().openPrintPage({ title: 'Kanban Board' });
     },
 
-    _getDefaultTypes: function() {
+    _getDefaultTypes: function () {
         return [this.getSetting('modelType')];
-//        return ['User Story', 'Defect'];
+        //        return ['User Story', 'Defect'];
     },
 
-    _buildStandardReportConfig: function(reportConfig) {
+    _buildStandardReportConfig: function (reportConfig) {
         var scope = this.getContext().getDataContext();
         return {
             xtype: 'rallystandardreport',
@@ -329,7 +442,7 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         };
     },
 
-    _showReportDialog: function(title, reportConfig) {
+    _showReportDialog: function (title, reportConfig) {
         var height = 450, width = 600;
         this.getEl().mask();
         Ext.create('Rally.ui.dialog.Dialog', {
@@ -348,7 +461,7 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
                     })
             ],
             listeners: {
-                close: function() {
+                close: function () {
                     this.getEl().unmask();
                 },
                 scope: this
@@ -356,12 +469,13 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         });
     },
 
-    _onBoardLoad: function() {
+    _onBoardLoad: function () {
         this._publishContentUpdated();
         this.setLoading(false);
+        this.resizeBoard();
     },
 
-    _onBeforeCreate: function(addNew, record, params) {
+    _onBeforeCreate: function (addNew, record, params) {
         Ext.apply(params, {
             rankTo: 'BOTTOM',
             rankScope: 'BACKLOG'
@@ -369,7 +483,7 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         record.set(this.getSetting('groupByField'), this.gridboard.getGridOrBoard().getColumns()[0].getValue());
     },
 
-    _onBeforeEditorShow: function(addNew, params) {
+    _onBeforeEditorShow: function (addNew, params) {
         params.rankTo = 'BOTTOM';
         params.rankScope = 'BACKLOG';
         params.iteration = 'u';
@@ -379,7 +493,7 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         params[groupByFieldName] = this.gridboard.getGridOrBoard().getColumns()[0].getValue();
     },
 
-    _onBeforeCardSaved: function(column, card, type) {
+    _onBeforeCardSaved: function (column, card, type) {
         var columnSetting = this._getColumnSetting();
         if (columnSetting) {
             var setting = columnSetting[column.getValue() || ""];
@@ -389,7 +503,11 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         }
     },
 
-    _publishContentUpdated: function() {
+    searchAllProjects() {
+        return this.ancestorFilterPlugin.getIgnoreProjectScope();
+    },
+
+    _publishContentUpdated: function () {
         this.fireEvent('contentupdated');
         if (Rally.BrowserTest) {
             Rally.BrowserTest.publishComponentReady(this);
@@ -402,19 +520,11 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         });
     },
 
-    _publishContentUpdatedNoDashboardLayout: function() {
-        this.fireEvent('contentupdated', {dashboardLayout: false});
+    _publishContentUpdatedNoDashboardLayout: function () {
+        this.fireEvent('contentupdated', { dashboardLayout: false });
     },
-    
-    isExternal: function(){
-        return typeof(this.getAppId()) == 'undefined';
+
+    isExternal: function () {
+        return typeof (this.getAppId()) == 'undefined';
     },
-    
-    //onSettingsUpdate:  Override
-    onSettingsUpdate: function (settings){
-        this.logger.log('onSettingsUpdate',settings);
-        Ext.apply(this, settings);
-        this.launch();
-    }
-    
 });
