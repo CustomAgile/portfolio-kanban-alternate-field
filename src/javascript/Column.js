@@ -11,8 +11,8 @@ Ext.define('Rally.apps.kanban.Column', {
 
         Ext.Array.push(filters, this.callParent(arguments));
 
-        if (this.hideReleasedCards) {
-            filters = filters.and({
+        if (this.hideReleasedCards && model.typePath.toLowerCase() === 'portfolioitem/feature') {
+            filters.push({
                 property: 'Release',
                 value: null
             });

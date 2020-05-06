@@ -25,7 +25,6 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
     appName: 'Kanban',
 
     settingsScope: 'project',
-    // autoScroll: false,
 
     layout: {
         type: 'vbox',
@@ -64,25 +63,28 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
             columns: Ext.JSON.encode({
                 None: { wip: '' }
             }),
-            cardFields: 'FormattedID,Name,Owner,Discussion', //remove with COLUMN_LEVEL_FIELD_PICKER_ON_KANBAN_SETTINGS
+            cardFields: 'FormattedID,Name,Owner,Discussion',
             hideReleasedCards: false,
             showCardAge: true,
             cardAgeThreshold: 3,
             pageSize: 25,
-            modelType: null
+            modelType: null,
+            firstLoad: true // Used to merge old inline filter values the first time the new version is loaded
         }
     },
 
     launch: function () {
         var modelType = this.getSetting('modelType');
         this.filterDeferred = Ext.create('Deft.Deferred');
+        this.gridArea = this.down('#grid-area');
 
         this.ancestorFilterPlugin = Ext.create('Utils.AncestorPiAppFilter', {
             ptype: 'UtilsAncestorPiAppFilter',
             pluginId: 'ancestorFilterPlugin',
             settingsConfig: {},
-            whiteListFields: ['Tags', 'Milestones', 'c_EnterpriseApprovalEA', 'c_EAEpic'],
+            whiteListFields: ['Tags', 'Milestones', 'c_EnterpriseApprovalEA', 'c_EAEpic', 'DisplayColor'],
             filtersHidden: false,
+            displayMultiLevelFilter: true,
             visibleTab: modelType,
             listeners: {
                 scope: this,
@@ -92,21 +94,36 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
                         select: this._addCardboardContent,
                         change: this._addCardboardContent
                     });
-                    this.filterDeferred.resolve();
+
+                    if (this.getSetting('firstLoad')) {
+                        plugin.mergeLegacyFilter(plugin.getMultiLevelFilterStates(), Ext.state.Manager.get(this.getContext().getScopedStateId('kanban-filter')), modelType, true);
+
+                        this.updateSettingsValues({
+                            settings: {
+                                firstLoad: false
+                            }
+                        });
+
+                        setTimeout(() => this.filterDeferred.resolve(false), 1000);
+                    }
+
+                    else {
+                        this.filterDeferred.resolve(true);
+                    }
                 },
             }
         });
         this.addPlugin(this.ancestorFilterPlugin);
 
         if (!modelType) {
-            this.down('#grid-area').add({
+            this.gridArea.add({
                 xtype: 'container',
                 html: '<div class="no-data-container">Please set up the configuration settings in the board.<div class="secondary-message">'
             });
             return;
         }
 
-        this.down('#grid-area').on('resize', this.resizeBoard, this);
+        this.gridArea.on('resize', this.resizeBoard, this);
 
         this.setLoading(true);
 
@@ -118,10 +135,9 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
     },
 
     resizeBoard: function () {
-        let gridArea = this.down('#grid-area');
         let gridboard = this.down('rallygridboard');
-        if (gridArea && gridboard) {
-            gridboard.setHeight(gridArea.getHeight())
+        if (this.gridArea && gridboard) {
+            gridboard.setHeight(this.gridArea.getHeight())
         }
     },
 
@@ -148,10 +164,9 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
      * @protected
      * @param {Rally.app.TimeboxScope} timeboxScope The new scope
      */
-    onTimeboxScopeChange: function (timeboxScope) {
+    onTimeboxScopeChange: function () {
         this.callParent(arguments);
-        this.gridboard.destroy();
-        this.launch();
+        this._addCardboardContent();
     },
 
     _shouldShowColumnLevelFieldPicker: function () {
@@ -165,8 +180,10 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         this.groupByField = model.getField(this.getSetting('groupByField'));
 
         this.filterDeferred.promise.then({
-            success() {
-                this._addCardboardContent();
+            success(addContent) {
+                if (addContent) {
+                    this._addCardboardContent();
+                }
             },
             scope: this
         });
@@ -176,13 +193,14 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         this.logger.log('_addCardboardContent');
 
         this.setLoading(true);
+        let status = this.cancelPreviousLoad();
 
         if (this.gridboard) { this.gridboard.destroy(); }
 
         var cardboardConfig = this._getCardboardConfig();
-        let gridboardConfig = await this._getGridboardConfig(cardboardConfig);
+        let gridboardConfig = await this._getGridboardConfig(cardboardConfig, status);
 
-        if (!gridboardConfig.storeConfig.filters) {
+        if (status.cancelLoad) {
             return;
         }
 
@@ -196,18 +214,20 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
 
         if (!this.rendered) {
             this.on('render', function () {
-                this.gridboard = this.down('#grid-area').add(gridboardConfig);
+                if (!status.cancelLoad) {
+                    this.gridboard = this.gridArea.add(gridboardConfig);
+                }
             }, this);
         } else {
-            this.gridboard = this.down('#grid-area').add(gridboardConfig);
+            this.gridboard = this.gridArea.add(gridboardConfig);
         }
     },
 
-    _getGridboardConfig: async function (cardboardConfig) {
+    _getGridboardConfig: async function (cardboardConfig, status) {
         var context = this.getContext(),
             modelNames = this._getDefaultTypes(),
             blacklist = ['Successors', 'Predecessors', 'DisplayColor'],
-            // height = this.down('#grid-area').getHeight(),
+            // height = this.gridArea.getHeight(),
             typeName = modelNames[0].replace('PortfolioItem/', '');
 
         let dataContext = context.getDataContext();
@@ -216,7 +236,7 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
             dataContext.project = null;
         }
 
-        let filters = await this._getFilters();
+        let filters = await this._getFilters(status);
 
         return {
             xtype: 'rallygridboard',
@@ -332,9 +352,7 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
     },
 
     _onInvalidFilter: function () {
-        Rally.ui.notify.Notifier.showError({
-            message: 'Invalid query: ' + this.getSetting('query')
-        });
+        this.showError('Invalid query: ' + this.getSetting('query'));
     },
 
     _getCardboardConfig: function () {
@@ -392,29 +410,37 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         return config;
     },
 
-    _getFilters: async function () {
+    _getFilters: async function (status) {
         var filters = [];
-        let loadingFailed = false;
+
         if (this.getSetting('query')) {
             filters.push(Rally.data.QueryFilter.fromQueryString(this.getSetting('query')));
         }
+
         if (this.getContext().getTimeboxScope()) {
             filters.push(this.getContext().getTimeboxScope().getQueryFilter());
         }
 
         let ancestorAndMultiFilters = await this.ancestorFilterPlugin.getAllFiltersForType(this.modelTypePath, true).catch((e) => {
-            Rally.ui.notify.Notifier.showError({ message: (e.message || e) });
-            loadingFailed = true;
+            this.showError(e, 'Failed while loading filters');
+            status.cancelLoad = true;
+            this.setLoading(false);
         });
-
-        if (loadingFailed) {
-            return null;
-        }
 
         if (ancestorAndMultiFilters) {
             filters = filters.concat(ancestorAndMultiFilters);
         }
         return filters;
+    },
+
+    cancelPreviousLoad: function () {
+        if (this.globalStatus) {
+            this.globalStatus.cancelLoad = true;
+        }
+
+        let newStatus = { cancelLoad: false };
+        this.globalStatus = newStatus;
+        return newStatus;
     },
 
     _getColumnSetting: function () {
@@ -505,6 +531,38 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
 
     searchAllProjects() {
         return this.ancestorFilterPlugin.getIgnoreProjectScope();
+    },
+
+    showError(msg, defaultMsg) {
+        Rally.ui.notify.Notifier.showError({ message: this.parseError(msg, defaultMsg) });
+    },
+
+    parseError(e, defaultMessage) {
+        defaultMessage = defaultMessage || 'An error occurred while loading the report';
+
+        if (typeof e === 'string' && e.length) {
+            return e;
+        }
+        if (e.message && e.message.length) {
+            return e.message;
+        }
+        if (e.exception && e.error && e.error.errors && e.error.errors.length) {
+            if (e.error.errors[0].length) {
+                return e.error.errors[0];
+            } else {
+                if (e.error && e.error.response && e.error.response.status) {
+                    return `${defaultMessage} (Status ${e.error.response.status})`;
+                }
+            }
+        }
+        if (e.exceptions && e.exceptions.length && e.exceptions[0].error) {
+            return e.exceptions[0].error.statusText;
+        }
+        return defaultMessage;
+    },
+
+    setLoading(msg) {
+        this.gridArea.setLoading(msg);
     },
 
     _publishContentUpdated: function () {

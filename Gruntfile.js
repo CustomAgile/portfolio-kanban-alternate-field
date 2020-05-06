@@ -1,7 +1,7 @@
 // references: https://github.com/request/request#http-authentication
 // https://www.npmjs.com/package/grunt-http
 
-module.exports = function(grunt) {
+module.exports = function (grunt) {
     require('grunt');
 
     var config_file_name = 'config.json';
@@ -9,48 +9,51 @@ module.exports = function(grunt) {
 
     var config = { auth: {} };
 
-    if ( grunt.file.exists(config_file_name) ) {
+    if (grunt.file.exists(config_file_name)) {
 
         config = grunt.file.readJSON(config_file_name);
 
-        if ( config.javascript ) {
+        if (config.javascript) {
             config.js_files = config.javascript;
         } else {
-            config.js_files = grunt.file.expand(['src/javascript/utils/*.js','src/javascript/*.js']);
+            config.js_files = grunt.file.expand(['src/javascript/utils/*.js', 'src/javascript/*.js']);
         }
 
         config.ugly_files = grunt.file.expand(['deploy/app.min.*.js']);
 
-        if ( config.css ) {
+        if (config.css) {
             config.css_files = config.css;
         } else {
-            config.css_files = grunt.file.expand( 'src/style/*.css' );
+            config.css_files = grunt.file.expand('src/style/*.css');
         }
 
         config.js_contents = " ";
-        for (var i=0;i<config.js_files.length;i++) {
-            grunt.log.writeln( config.js_files[i]);
+        for (var i = 0; i < config.js_files.length; i++) {
+            grunt.log.writeln(config.js_files[i]);
             config.js_contents = config.js_contents + "\n" + grunt.file.read(config.js_files[i]);
         }
 
         config.style_contents = "";
-        for (var i=0;i<config.css_files.length;i++) {
-            grunt.log.writeln( config.css_files[i]);
+        for (var i = 0; i < config.css_files.length; i++) {
+            grunt.log.writeln(config.css_files[i]);
             config.style_contents = config.style_contents + "\n" + grunt.file.read(config.css_files[i]);
         }
 
         config.ugly_contents = "";
-        for ( var i=0;i<config.ugly_files;i++ ) {
+        for (var i = 0; i < config.ugly_files; i++) {
             grunt.file.read(config.ugly_files[i]);
         }
     }
-    if ( grunt.file.exists(auth_file_name) ) {
+    if (grunt.file.exists(auth_file_name)) {
         var auth = grunt.file.readJSON(auth_file_name);
         config.auth = auth
     } else {
         grunt.log.writeln("");
         grunt.log.writeln("WARNING: Slow tests won't run without an auth.json file");
     }
+
+    pkg = grunt.file.readJSON('package.json')
+    config.pkg = pkg
 
     grunt.initConfig({
         pkg: grunt.file.readJSON('package.json'),
@@ -85,7 +88,7 @@ module.exports = function(grunt) {
             }
         },
         watch: {
-            files: ['test/fast/*-spec.js',config.js_files, config.css_files],
+            files: ['test/fast/*-spec.js', config.js_files, config.css_files],
             tasks: ['test-and-deploy']
         },
         jasmine: {
@@ -95,7 +98,7 @@ module.exports = function(grunt) {
                     specs: 'test/fast/*-spec.js',
                     helpers: 'test/fast/*Helper.js',
                     template: 'test/fast/custom.tmpl',
-                    vendor:[
+                    vendor: [
                         'node_modules/rally-sdk2-test-utils/src/sdk/' + config.sdk + '/sdk-debug.js',
                         'node_modules/rally-sdk2-test-utils/dist/sdk2-test-utils.js'
                     ],
@@ -123,12 +126,12 @@ module.exports = function(grunt) {
         }
     });
 
-    grunt.registerTask('putUglyInConfig', 'add results of uglification to the config', function() {
+    grunt.registerTask('putUglyInConfig', 'add results of uglification to the config', function () {
         config.ugly_contents = grunt.file.read('deploy/app.min.js');
     });
 
 
-    grunt.registerTask('setPostBuildInfo', 'Make a sloppy checksum', function(deploy_file_name) {
+    grunt.registerTask('setPostBuildInfo', 'Make a sloppy checksum', function (deploy_file_name) {
         var fs = require('fs'),
             username = require('username');
         chk = 0x12345678,
@@ -137,9 +140,9 @@ module.exports = function(grunt) {
         grunt.log.writeln('deploy file:', deploy_file_name);
         var deploy_file = grunt.file.read(deploy_file_name);
 
-        string = deploy_file.replace(/var CHECKSUM = .*;/,"");
-        string = string.replace(/var BUILDER  = .*;/,"");
-        string = string.replace(/\s/g,"");  //Remove all whitespace from the string.
+        string = deploy_file.replace(/var CHECKSUM = .*;/, "");
+        string = string.replace(/var BUILDER  = .*;/, "");
+        string = string.replace(/\s/g, "");  //Remove all whitespace from the string.
 
         for (i = 0; i < string.length; i++) {
             chk += (string.charCodeAt(i) * i);
@@ -147,8 +150,8 @@ module.exports = function(grunt) {
         var builder = username.sync();
         grunt.log.writeln('setting builder:', builder);
 
-//
-        grunt.template.addDelimiters('square-brackets','[%','%]');
+        //
+        grunt.template.addDelimiters('square-brackets', '[%', '%]');
 
         var data = { checksum: chk, builder: builder };
         var output = grunt.template.process(deploy_file, {
@@ -156,40 +159,40 @@ module.exports = function(grunt) {
             delimiters: 'square-brackets'
         });
 
-        grunt.file.write(deploy_file_name,output);
+        grunt.file.write(deploy_file_name, output);
     });
 
-    grunt.registerTask('install', 'Deploy the app to a rally instance', function(deploy_file_name) {
+    grunt.registerTask('install', 'Deploy the app to a rally instance', function (deploy_file_name) {
 
-        if ( ! config.auth ) {
+        if (!config.auth) {
             grunt.log.writeln("To deploy, define server, username and password in auth.json file");
             return;
         }
         var valid = true;
-        if ( !config.auth.server || config.auth.server == "" ) {
+        if (!config.auth.server || config.auth.server == "") {
             grunt.log.writeln("To deploy, server must be defined in the auth.json file");
             valid = false;
         }
 
-        if ( !config.auth.username || config.auth.username == "" ) {
+        if (!config.auth.username || config.auth.username == "") {
             grunt.log.writeln("To deploy, username must be defined in the auth.json file");
             valid = false;
         }
 
-        if ( !config.auth.password || config.auth.password == "" ) {
+        if (!config.auth.password || config.auth.password == "") {
             grunt.log.writeln("To deploy, password must be defined in the auth.json file");
             valid = false;
         }
 
-        if ( !valid ) { return; }
+        if (!valid) { return; }
 
         var done = this.async();
         var request = require('request');
 
         var j = request.jar();
-        request.defaults({jar: j});
+        request.defaults({ jar: j });
 
-        var installApp = function(page_oid,panel_oid) {
+        var installApp = function (page_oid, panel_oid) {
             // DEFAULT TO ugly for deploying
             var html = grunt.file.read('deploy/Ugly.txt');
 
@@ -197,8 +200,8 @@ module.exports = function(grunt) {
             grunt.log.writeln('URI:', uri);
 
             var parameters = {
-                cpoid:10909656256,
-                _slug:'/custom/' + page_oid
+                cpoid: 10909656256,
+                _slug: '/custom/' + page_oid
             };
 
             var payload = {
@@ -221,26 +224,26 @@ module.exports = function(grunt) {
                 jar: j
             };
 
-            request.post(options, function(error,response,body){
-                if ( response.statusCode != 200 ) {
+            request.post(options, function (error, response, body) {
+                if (response.statusCode != 200) {
                     grunt.log.writeln('oops');
                 }
                 grunt.log.writeln('--Deployed--');
             });
         };
 
-        var makeApp = function(key,page_oid) {
+        var makeApp = function (key, page_oid) {
             var uri = config.auth.server + "/slm/dashboard/addpanel.sp";
 
             var parameters = {
-                cpoid:10909656256,
-                _slug:'/custom/' + page_oid
+                cpoid: 10909656256,
+                _slug: '/custom/' + page_oid
             };
 
             var payload = {
-                panelDefinitionOid:431632107,
-                col:0,
-                index:0,
+                panelDefinitionOid: 431632107,
+                col: 0,
+                index: 0,
                 dashboardName: 'myhome' + page_oid
             };
 
@@ -253,8 +256,8 @@ module.exports = function(grunt) {
                 jar: j
             };
 
-            request.post(options, function(error,response,body){
-                if ( response.statusCode != 200 ) {
+            request.post(options, function (error, response, body) {
+                if (response.statusCode != 200) {
                     grunt.log.writeln('oops');
                 }
 
@@ -264,17 +267,17 @@ module.exports = function(grunt) {
                 grunt.log.writeln('Save IDs');
                 config.auth.pageOid = page_oid;
                 config.auth.panelOid = response_object.oid;
-                grunt.file.write(auth_file_name,JSON.stringify(config.auth,null,'\t') + "\r\n");
+                grunt.file.write(auth_file_name, JSON.stringify(config.auth, null, '\t') + "\r\n");
 
                 grunt.log.writeln('Created panel with oid:', response_object.oid);
-                installApp(page_oid,response_object.oid);
+                installApp(page_oid, response_object.oid);
             });
         };
 
-        var makePage = function(key) {
+        var makePage = function (key) {
             var uri = config.auth.server + "/slm/wt/edit/create.sp";
             var parameters = {
-                cpoid:729766,
+                cpoid: 729766,
                 key: key
             };
 
@@ -283,7 +286,7 @@ module.exports = function(grunt) {
                 editorMode: 'create',
                 pid: 'myhome',
                 oid: 6440917,
-                timeboxFilter:'none'
+                timeboxFilter: 'none'
             };
 
             grunt.log.writeln('Creating page:', payload.name);
@@ -295,9 +298,9 @@ module.exports = function(grunt) {
                 jar: j
             };
 
-            request.post(options, function(error,response,body){
+            request.post(options, function (error, response, body) {
                 //grunt.log.writeln('responseCode:', response.statusCode);
-                if ( response.statusCode != 200 ) {
+                if (response.statusCode != 200) {
                     grunt.log.writeln('oops');
                     //grunt.log.writeln('--', response.headers);
                     //grunt.log.writeln('--', response.request.headers);
@@ -307,11 +310,11 @@ module.exports = function(grunt) {
                 //grunt.log.writeln('response body', body);
                 // looking for
                 // <input type="hidden" name="oid" value="52337144851"/>
-                var page_oid = body.replace(/(.|[\r\n])*name="oid"/,"").replace(/"\/\>(.|[\r\n])*/,"").replace(/.*"/,"");
+                var page_oid = body.replace(/(.|[\r\n])*name="oid"/, "").replace(/"\/\>(.|[\r\n])*/, "").replace(/.*"/, "");
 
                 grunt.log.writeln('Created', payload.name, " at oid:", page_oid);
 
-                makeApp(key,page_oid)
+                makeApp(key, page_oid)
             });
         };
 
@@ -319,32 +322,32 @@ module.exports = function(grunt) {
 
         var options = {
             uri: uri,
-            method:'GET',
+            method: 'GET',
             auth: { 'user': config.auth.username, 'pass': config.auth.password, 'sendImmediately': true }
         };
 
         grunt.log.writeln('Authenticating on ', config.auth.server, ' as ', config.auth.username);
 
-        request.get(options, function(error,response,body){
-                if ( response.statusCode != 200 ) {
-                    grunt.log.writeln('oops: couldn not log in');
+        request.get(options, function (error, response, body) {
+            if (response.statusCode != 200) {
+                grunt.log.writeln('oops: couldn not log in');
+            } else {
+                var json = JSON.parse(body);
+                var key = json.OperationResult.SecurityToken;
+
+                var cookie = response.headers['set-cookie'];
+
+                for (var i = 0; i < cookie.length; i++) {
+                    j.setCookie(request.cookie(cookie[i]), config.auth.server);
+                }
+
+                if (!config.auth.pageOid && !config.auth.panelOid) {
+                    makePage(key);
                 } else {
-                    var json = JSON.parse(body);
-                    var key = json.OperationResult.SecurityToken;
-
-                    var cookie = response.headers['set-cookie'];
-
-                    for ( var i=0; i<cookie.length; i++ ) {
-                        j.setCookie(request.cookie(cookie[i]),config.auth.server);
-                    }
-
-                    if (!config.auth.pageOid && !config.auth.panelOid) {
-                        makePage(key);
-                    } else {
-                        installApp(config.auth.pageOid, config.auth.panelOid);
-                    }
+                    installApp(config.auth.pageOid, config.auth.panelOid);
                 }
             }
+        }
         );
 
 
@@ -357,22 +360,22 @@ module.exports = function(grunt) {
     grunt.loadNpmTasks('grunt-contrib-watch');
 
     //tasks
-    grunt.registerTask('default', ['debug','ugly']);
+    grunt.registerTask('default', ['debug', 'ugly']);
 
     // a human readable .txt file
-    grunt.registerTask('pretty', "Create the html for deployment",['template:prod','setPostBuildInfo:deploy/App.txt']);
+    grunt.registerTask('pretty', "Create the html for deployment", ['template:prod', 'setPostBuildInfo:deploy/App.txt']);
     //
     grunt.registerTask('debug', "Create an html file that can run in its own tab", ['template:dev']);
     //
-    grunt.registerTask('ugly', "Create the ugly html for deployment",['uglify:ugly','putUglyInConfig','template:ugly','setPostBuildInfo:deploy/Ugly.txt']);
+    grunt.registerTask('ugly', "Create the ugly html for deployment", ['uglify:ugly', 'putUglyInConfig', 'template:ugly', 'setPostBuildInfo:deploy/Ugly.txt']);
     //
 
     grunt.registerTask('test-fast', "Run tests that don't need to connect to Rally", ['jasmine:fast']);
     grunt.registerTask('test-slow', "Run tests that need to connect to Rally", ['jasmine:slow']);
 
-    grunt.registerTask('test-and-deploy', 'Build and deploy app to the location in auth.json',['test-fast','ugly','install']);
+    grunt.registerTask('test-and-deploy', 'Build and deploy app to the location in auth.json', ['test-fast', 'ugly', 'install']);
 
-    grunt.registerTask('deploy', 'Build and deploy app to the location in auth.json',['ugly','install']);
+    grunt.registerTask('deploy', 'Build and deploy app to the location in auth.json', ['ugly', 'install']);
 
-    grunt.registerTask('deploy-pretty', 'Build and deploy app to the location in auth.json',['pretty','install']);
+    grunt.registerTask('deploy-pretty', 'Build and deploy app to the location in auth.json', ['pretty', 'install']);
 };

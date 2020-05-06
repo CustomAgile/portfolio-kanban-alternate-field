@@ -83,7 +83,6 @@ Ext.define('Rally.apps.kanban.Settings', {
                         this.refreshWithNewField(field);
                     },
                     modelselected: function (model) {
-                        console.log('modelselected', model);
                         this.refreshWithNewModel(model);
                     }
                 },
@@ -115,13 +114,26 @@ Ext.define('Rally.apps.kanban.Settings', {
             ]
         });
 
+        let model = Rally.getApp().getSetting('modelType');
+
         items.push(
             {
                 name: 'hideReleasedCards',
                 xtype: 'rallycheckboxfield',
                 fieldLabel: 'Options',
                 margin: '10 0 0 0',
-                boxLabel: 'Hide cards in last visible column if assigned to a release'
+                boxLabel: 'Hide cards in last visible column if assigned to a release',
+                disabled: model && model.toLowerCase().indexOf('feature') === -1,
+                handlesEvents: {
+                    modelselected: function (model) {
+                        if (model && model.toLowerCase().indexOf('feature') > -1) {
+                            this.enable();
+                        }
+                        else {
+                            this.disable();
+                        }
+                    }
+                }
             },
             {
                 type: 'cardage',
