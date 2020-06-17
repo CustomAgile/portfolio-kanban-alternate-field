@@ -1,7 +1,7 @@
 {
   "_comment": "This file is used by grunt",
   "name": "TSPortfolioKanbanAlternateField",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "dependencies": {
     "@customagile/ancestor-pi-multi-level-pi-app-filter": "git+https://github.com/CustomAgile/utils-ancestor-pi-app-filter.git"
   },

@@ -81,9 +81,6 @@ Ext.define("TSPortfolioKanbanAlternateFieldApp", {
         this.ancestorFilterPlugin = Ext.create('Utils.AncestorPiAppFilter', {
             ptype: 'UtilsAncestorPiAppFilter',
             pluginId: 'ancestorFilterPlugin',
-            settingsConfig: {},
-            whiteListFields: ['Tags', 'Milestones', 'c_EnterpriseApprovalEA', 'c_EAEpic', 'DisplayColor'],
-            filtersHidden: false,
             displayMultiLevelFilter: true,
             visibleTab: modelType,
             listeners: {
